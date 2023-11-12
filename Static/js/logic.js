@@ -1,71 +1,84 @@
 //Read data
-let url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson'
+var path = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson"
 
-d3.json(url).then(function(earthquake)
-{
-createMarker(earthquake.features)
+
+d3.json(path).then(function(data){
+    createFeatures(data.features);
 });
 
-// Create a map object.
-let myMap = L.map("map", {
-  center: [29.7604, -95.3698],
-  zoom: 5
-});
+function qColor(qColor) {
+    const colorRanges = [
+        { min: 0, max: 10, color: "#DAF7A6" }, 
+        { min: 10, max: 20, color: "#FFC300" }, 
+        { min: 20, max: 30, color: "#FF5733" },   
+        { min: 30, max: 40, color: "#C70039" }, 
+        { min: 40, max: 50, color: "#900C3F" }, 
+        { min: 50, max: 60, color: "#581845" } 
+    ];
 
-// Add a tile layer.
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(myMap);
+    for (const range of colorRanges) {
+        if (range.min <= qColor && qColor <= range.max) {
+            return range.color;
+        }
+    }
 
-
-// Define a createMarker() function 
-function createMarker(earthquakeFeatures) {
-  console.log(earthquakeFeatures);
-
-for (i=0;i<earthquakeFeatures.length;i++){
-
-  let location = earthquakeFeatures[i].geometry.coordinates;
-  let magnitude = earthquakeFeatures[i].properties.mag * 5000;
-  L.circle([location[1],location[0]], {
-    fillOpacity: 0.75,
-    color: markerColor(location[2]),
-    fillColor: markerColor(location[2]),
-    // Setting our circle's radius to equal the output of our markerSize() function:
-    // This will make our marker's size proportionate to its population.
-    radius: magnitude
-  }).bindPopup(`<h1>Magnitude = ${earthquakeFeatures[i].properties.mag}</h1> <hr> <h3>Place = ${earthquakeFeatures[i].properties.place} </h3>`).addTo(myMap);
-};
+    return "#311432";
 }
-// Define a markerSize() function that will give each earthquake size and depth
-function markerColor(depth) {
-  if (depth < 10) return "#04FC14";
-  else if (depth < 30) return "#B7FC04";
-  else if (depth < 50) return "#EEFC04";
-  else if (depth < 70) return "#FCB304";
-  else if (depth < 90) return "#FC8504";
-  else return "#FC0904"
-};
+function pointMaker(features, latlng){
+    var circleOptions = {
+        radius: features.properties.mag * 8, 
+        fillColor: qColor(features.geometry.coordinates[2]),
+        color: qColor(features.geometry.coordinates[2]),
+        opacity: 1, 
+        fillOpacity: 0.5 
+    }
+    return L.circleMarker(latlng, circleOptions)
+}
 
-  // Set up the legend.
-  let legend = L.control({ position: "bottomright" });
-  legend.onAdd = function() {
-    let div = L.DomUtil.create("div", "info legend");
-    let categories = ['-10','10','30','50','70','90'];
-    let colors =["#04FC14","#B7FC04","#EEFC04","#FCB304","#FC8504","#FC0904"]
-    let labels = [];
+function createFeatures(earthquakeData){
 
-    // Add the minimum and maximum.
-    let legendInfo = "<h1>Depth</h1>"
+    function onEachFeature(feature, layer){
+        layer.bindPopup(`<h3>${feature.properties.place}</h3><hr>
+        <p>${new Date(feature.properties.time)}</p><hr>
+        <p> mag:${feature.properties.mag}</p><hr>
+        <p>depth:${feature.geometry.coordinates[2]}</p>`);
+    }
 
-    div.innerHTML = legendInfo;
-
-    categories.forEach(function(limit, index) {
-      labels.push("<li style=\"background-color: " + colors[index] + "\"></li>"+ categories[index] + (categories[index + 1] ? '&ndash;' + categories[index + 1] + '<br>' : '+'));
+    let earthquakes = L.geoJSON(earthquakeData, {
+        onEachFeature: onEachFeature, 
+        pointToLayer: pointMaker
     });
 
-    div.innerHTML += "<ul>" + labels.join("") + "</ul>";
-    return div;
-  };
+    createMap(earthquakes);
+}
 
-  // Adding the legend to the map
-  legend.addTo(myMap);
+function createMap(earthquakes){
+    let street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    });
+
+    let topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    });
+
+    let baseMaps = {
+        "Street Map": street,
+        "Topographic Map": topo
+    };
+
+    let overlayMaps = {
+        Earthquakes: earthquakes
+    };
+
+    let myMap = L.map("map", {
+        center: [
+            37.09, -95.71
+        ],
+        zoom: 5,
+        layers: [street, earthquakes]
+    });
+
+    L.control.layers(baseMaps, overlayMaps, {
+        collapsed: false
+    }).addTo(myMap);
+}
